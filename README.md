@@ -88,10 +88,6 @@ id | userDocument                                    | creditCardToken          
 1  | gAAAAABqWAeipNX_xTJV7gaLYqz7Rl27k5B9EJ5oKoEn...  | gAAAAABqWAeiSu-WIpoEBuUnmAl9hEThoEeBGYMzNF-Y...  | 5999
 ```
 
-## Deploy
-
-Pronto para subir no [Railway](https://railway.app): basta apontar o start command para `uvicorn app.main:app --host 0.0.0.0 --port $PORT` e configurar `ENCRYPTION_KEY` e `DATABASE_URL` nas variáveis de ambiente do serviço.
-
 ---
 
 © 2026 Gabriel Teramae Chan
