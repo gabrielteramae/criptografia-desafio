@@ -4,7 +4,6 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white)
 ![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0-D71F00?logo=python&logoColor=white)
 ![Cryptography](https://img.shields.io/badge/AES-Fernet-black?logo=letsencrypt&logoColor=white)
-![License](https://img.shields.io/badge/license-MIT-blue)
 
 Solução para o desafio [`backend-br/desafios/cryptography`](https://github.com/backend-br/desafios/blob/master/cryptography/PROBLEM.md): implementar criptografia transparente em campos sensíveis de uma entidade, sem que a camada de API ou a lógica de negócio precise conhecer o processo de cifrar/decifrar.
 
