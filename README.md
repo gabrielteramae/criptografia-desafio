@@ -43,8 +43,8 @@ app/
 ## Como rodar
 
 ```bash
-git clone <seu-repo>
-cd crypto-transparent-api
+git clone https://github.com/gabrielteramae/criptografia-desafio.git
+cd criptografia-desafio
 pip install -r requirements.txt
 
 export ENCRYPTION_KEY=$(python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
