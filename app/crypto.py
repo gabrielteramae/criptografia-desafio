@@ -5,7 +5,7 @@ _key = os.getenv("ENCRYPTION_KEY")
 
 if not _key:
     _key = Fernet.generate_key().decode()
-    print(f"[crypto] ENCRYPTION_KEY nao definida, usando chave temporaria: {_key}")
+    print("[crypto] ENCRYPTION_KEY nao definida. Esta execucao usa uma chave temporaria que se perde ao reiniciar.")
 
 _fernet = Fernet(_key.encode())
 
