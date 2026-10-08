@@ -1,4 +1,5 @@
 from sqlalchemy.types import TypeDecorator, String
+from cryptography.fernet import InvalidToken
 from app.crypto import encrypt, decrypt
 
 
@@ -10,4 +11,9 @@ class EncryptedString(TypeDecorator):
         return encrypt(value)
 
     def process_result_value(self, value, dialect):
-        return decrypt(value)
+        if value is None:
+            return None
+        try:
+            return decrypt(value)
+        except InvalidToken:
+            return None
