@@ -1,43 +1,45 @@
-# Crypto Transparent API
+# Criptografia transparente — campos sensíveis cifrados na coluna
 
-![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white)
-![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0-D71F00?logo=python&logoColor=white)
-![Cryptography](https://img.shields.io/badge/AES-Fernet-black?logo=letsencrypt&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.115.0-009688?logo=fastapi&logoColor=white)
+![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0.35-D71F00)
+![cryptography](https://img.shields.io/badge/cryptography-43.0.1-555555)
 
-Solução para o desafio [`backend-br/desafios/cryptography`](https://github.com/backend-br/desafios/blob/master/cryptography/PROBLEM.md): implementar criptografia transparente em campos sensíveis de uma entidade, sem que a camada de API ou a lógica de negócio precise conhecer o processo de cifrar/decifrar.
+API CRUD de uma entidade com `userDocument` e `creditCardToken`. A cifra não fica no controller: um `TypeDecorator` do SQLAlchemy aplica Fernet na ida e na volta da coluna. `value` permanece inteiro, em claro.
 
-## Ideia da solução
+## Por que cifrar na coluna
 
-Os campos `userDocument` e `creditCardToken` nunca trafegam em texto puro para o banco. A conversão acontece automaticamente na camada de persistência através de um `TypeDecorator` do SQLAlchemy, então o resto da aplicação (rotas, schemas, regras de negócio) trabalha sempre com os valores originais.
+| Abordagem | O que acontece |
+| --- | --- |
+| `EncryptedString` na coluna | Rotas, schemas e CRUD trabalham com texto puro. O banco grava o token Fernet. |
+| `encrypt()` em cada rota | Qualquer endpoint novo pode esquecer de cifrar ou de decifrar. |
+| Cifra no arquivo do banco | Protege o disco, não o valor que um `SELECT` devolve. |
 
-```
-Request  -> Pydantic (texto puro) -> SQLAlchemy model -> EncryptedString.process_bind_param()  -> AES  -> banco
-Response <- Pydantic (texto puro) <- SQLAlchemy model <- EncryptedString.process_result_value() <- AES  <- banco
-```
+Fernet (pacote `cryptography`) é AES-128-CBC com HMAC. A chave vem de `ENCRYPTION_KEY`. Se a variável não existir, `crypto.py` gera uma chave só para aquele processo: o que foi gravado deixa de abrir no próximo restart. Token inválido na leitura vira `None`, não 500.
 
-Isso garante que:
-- Ninguém com acesso direto ao banco enxerga os dados sensíveis.
-- Nenhuma rota, service ou schema precisa chamar `encrypt`/`decrypt` manualmente.
-- Trocar o algoritmo de criptografia no futuro exige mudar apenas `crypto.py`.
+A coluna é `String(255)`. O token Fernet é maior que o texto original; documento ou token longos podem não caber.
 
 ## Stack
 
-- **FastAPI** para a API REST
-- **SQLAlchemy 2.0** com um `TypeDecorator` customizado (`EncryptedString`)
-- **cryptography.Fernet** (AES-128-CBC + HMAC autenticado) para a cifragem simétrica
-- **SQLite** por padrão (`DATABASE_URL` configurável para Postgres/MySQL)
+- Python (sem versão pinada no repositório; o código usa sintaxe 3.10+)
+- FastAPI 0.115.0 e Uvicorn 0.30.6
+- SQLAlchemy 2.0.35
+- `cryptography` 43.0.1 (Fernet)
+- SQLite por padrão (`sqlite:///./crypto.db`); `DATABASE_URL` troca o dialeto
 
 ## Estrutura
 
 ```
 app/
-├── main.py          # rotas da API (CRUD)
-├── models.py         # entidade SQLAlchemy
-├── schemas.py         # schemas Pydantic (sempre texto puro)
-├── crud.py            # operações de banco
-├── crypto.py           # encrypt/decrypt com Fernet
-└── crypto_types.py      # TypeDecorator que aplica a criptografia nas colunas
+├── main.py            # CRUD /entities
+├── schemas.py         # Pydantic, sempre texto puro
+├── crud.py            # persistência, sem chamada a encrypt
+├── models.py          # userDocument e creditCardToken como EncryptedString
+├── crypto_types.py    # TypeDecorator
+├── crypto.py          # Fernet a partir de ENCRYPTION_KEY
+└── database.py        # engine e sessão
+.env.example
+requirements.txt
 ```
 
 ## Como rodar
@@ -45,47 +47,30 @@ app/
 ```bash
 git clone https://github.com/gabrielteramae/criptografia-desafio.git
 cd criptografia-desafio
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
-
-export ENCRYPTION_KEY=$(python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
-
+export ENCRYPTION_KEY="$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')"
+export DATABASE_URL="${DATABASE_URL:-sqlite:///./crypto.db}"
 uvicorn app.main:app --reload
 ```
 
-A API sobe em `http://localhost:8000`. Docs interativas em `/docs`.
-
-> Se `ENCRYPTION_KEY` não for definida, uma chave temporária é gerada em runtime (útil só para teste local — em produção sempre defina a variável de ambiente, senão os dados gravados se tornam ilegíveis a cada restart).
+Sobe em `http://127.0.0.1:8000`. O OpenAPI gerado pelo FastAPI fica em `/docs`.
 
 ## Endpoints
 
-| Método | Rota               | Descrição            |
-|--------|---------------------|------------------------|
-| POST   | `/entities`          | Cria uma entidade      |
-| GET    | `/entities`           | Lista entidades         |
-| GET    | `/entities/{id}`       | Busca por id             |
-| PUT    | `/entities/{id}`        | Atualiza por id            |
-| DELETE | `/entities/{id}`         | Remove por id                |
+| Método | Rota | Resposta |
+| --- | --- | --- |
+| GET | `/` | `{"status":"ok","service":"crypto-transparent-api"}` |
+| POST | `/entities` | 201, corpo com `userDocument`, `creditCardToken`, `value` |
+| GET | `/entities` | lista; query `skip` (padrão 0) e `limit` (padrão 100) |
+| GET | `/entities/{entity_id}` | 404 se não existir |
+| PUT | `/entities/{entity_id}` | substitui os três campos |
+| DELETE | `/entities/{entity_id}` | 204 |
 
-## Exemplo
+## O que não tem
 
-```bash
-curl -X POST http://localhost:8000/entities \
-  -H "Content-Type: application/json" \
-  -d '{"userDocument":"123.456.789-00","creditCardToken":"tok_abc123","value":5999}'
-```
-
-Resposta da API (texto puro):
-
-```json
-{"id": 1, "userDocument": "123.456.789-00", "creditCardToken": "tok_abc123", "value": 5999}
-```
-
-O que fica gravado no banco (criptografado):
-
-```
-id | userDocument                                    | creditCardToken                                 | value
-1  | gAAAAABqWAeipNX_xTJV7gaLYqz7Rl27k5B9EJ5oKoEn...  | gAAAAABqWAeiSu-WIpoEBuUnmAl9hEThoEeBGYMzNF-Y...  | 5999
-```
+Não há testes automatizados. Não há rotação de chave, nem cifra de `value`, nem Docker.
 
 ---
 
